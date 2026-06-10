@@ -21,7 +21,7 @@
 
   <!-- ── Authors ───────────────────────────────────────────────────────────── -->
   <ItemGroup>
-    <ModInfoAuthors Include="YourName" />
+    <ModInfoAuthors Include="Arkzenir" />
   </ItemGroup>
 
   <!-- ── Shared compiler settings ─────────────────────────────────────────── -->
