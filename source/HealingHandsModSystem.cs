@@ -169,9 +169,11 @@ public class HealingHandsModSystem : ModSystem
         if (col == null) return false;
         if (col.GetCollectibleBehavior<HealingInterceptBehavior>(withInheritance: false) != null) return false;
 
-        BehaviorHealingItem? healBehavior =
-            col.GetCollectibleBehavior<BehaviorHealingItem>(withInheritance: true);
-        if (healBehavior == null || healBehavior.Config.Health <= 0f) return false;
+        // In VS 1.22 the class was renamed from BehaviorHealingItem to CollectibleBehaviorHealingItem.
+        // It is fully public and accessible — use it directly.
+        CollectibleBehaviorHealingItem? healBehavior =
+            col.GetCollectibleBehavior<CollectibleBehaviorHealingItem>(withInheritance: true);
+        if (healBehavior == null || healBehavior.Health <= 0f) return false;
 
         HealingInterceptBehavior intercept = new(
             col,
