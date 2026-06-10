@@ -199,8 +199,8 @@ public sealed class HealingInterceptBehavior : CollectibleBehavior
     {
         if (_affectedByArmor.HasValue) return _affectedByArmor.Value;
 
-        CollectibleBehaviorHealingItem? healBehavior =
-            collObj.GetCollectibleBehavior<CollectibleBehaviorHealingItem>(withInheritance: true);
+        BehaviorHealingItem? healBehavior =
+            collObj.GetCollectibleBehavior<BehaviorHealingItem>(withInheritance: true);
 
         if (healBehavior == null)
         {
