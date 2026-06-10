@@ -49,6 +49,12 @@ namespace HealingHands.Systems;
 /// </summary>
 public sealed class HealingInterceptBehavior : CollectibleBehavior
 {
+    // The client never executes any logic here — all callbacks guard on EnumAppSide.Server.
+    // ClientSideOptional = true tells VS to skip this behavior during item-type packet
+    // deserialization on clients that don't have the mod loaded, rather than crashing with
+    // "Don't know how to instantiate collectible behavior of class 'HealingInterceptBehavior'".
+    public override bool ClientSideOptional => true;
+
     private readonly System.Func<Entity, Entity, HealModifier>? _computeModifier;
     private readonly ILogger? _logger;
 
