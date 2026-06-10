@@ -33,11 +33,6 @@ namespace HealingHands.Systems;
 /// synchronously, which triggers HealReceiveBehavior.OnEntityReceiveDamage where the
 /// modifier is consumed.</para>
 ///
-/// <para><b>Compile-time independence from BehaviorHealingItem.</b><br/>
-/// BehaviorHealingItem is not directly referenceable in VS 1.22 (it became an internal
-/// type in VSSurvivalMod). All access uses runtime type-name matching and JSON parsing
-/// of propertiesAtString so the code compiles against both 1.21 and 1.22.</para>
-///
 /// <para><b>Self-heal: complete no-op.</b><br/>
 /// ShouldSkip detects target == healer and returns from both Start and Stop without
 /// touching any state.</para>
@@ -99,7 +94,7 @@ public sealed class HealingInterceptBehavior : CollectibleBehavior
         // Only touch the stat when the item reads it (AffectedByArmor == true in the
         // behavior's JSON config) and the trait modifier changes cast time.
         // We locate the healing behavior and read AffectedByArmor at runtime to avoid
-        // a compile-time dependency on BehaviorHealingItem (inaccessible in VS 1.22).
+        // a compile-time dependency on BehaviorHealingItem
         if (mod.ApplySpeedMultiplier != 1.0f && GetHealingBehaviorAffectedByArmor())
         {
             // GetApplicationTime:  effectiveness = Clamp(GetBlended(), 0, 2) - 1
@@ -189,9 +184,7 @@ public sealed class HealingInterceptBehavior : CollectibleBehavior
     }
 
     /// <summary>
-    /// Returns the AffectedByArmor flag from the item's CollectibleBehaviorHealingItem config.
-    /// In VS 1.22, CollectibleBehaviorHealingItem is a public accessible type in
-    /// Vintagestory.GameContent (renamed from BehaviorHealingItem in 1.21).
+    /// Returns the AffectedByArmor flag
     /// Result is cached after the first call since the behavior list is fixed per item type.
     /// Defaults to true if the behavior or property cannot be found.
     /// </summary>
