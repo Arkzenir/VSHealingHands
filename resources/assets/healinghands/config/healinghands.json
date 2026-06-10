@@ -1,0 +1,94 @@
+{
+  "Enabled": true,
+  "OnlyAffectOtherPlayerHeals": true,
+  "CompoundingMode": "Multiplicative",
+  "MinMultiplier": 0.05,
+  "MaxMultiplier": 10.0,
+  "Defaults": {
+    "HpMultiplier": 1.0,
+    "HealSpeedMultiplier": 1.0,
+    "ApplySpeedMultiplier": 1.0
+  },
+  "TraitModifiers": [
+    {
+      "TraitCode": "hardy",
+      "Values": {
+        "HpMultiplier": 1.20,
+        "HealSpeedMultiplier": 1.15,
+        "ApplySpeedMultiplier": 1.00
+      }
+    },
+    {
+      "TraitCode": "mender",
+      "Values": {
+        "HpMultiplier": 1.10,
+        "HealSpeedMultiplier": 1.10,
+        "ApplySpeedMultiplier": 1.30
+      }
+    },
+    {
+      "TraitCode": "resourceful",
+      "Values": {
+        "HpMultiplier": 1.25,
+        "HealSpeedMultiplier": 1.00,
+        "ApplySpeedMultiplier": 1.00
+      }
+    },
+    {
+      "TraitCode": "soldier",
+      "Values": {
+        "HpMultiplier": 1.10,
+        "HealSpeedMultiplier": 1.00,
+        "ApplySpeedMultiplier": 1.25
+      }
+    },
+    {
+      "TraitCode": "furtive",
+      "Values": {
+        "HpMultiplier": 1.00,
+        "HealSpeedMultiplier": 1.00,
+        "ApplySpeedMultiplier": 1.20
+      }
+    },
+    {
+      "TraitCode": "frail",
+      "Values": {
+        "HpMultiplier": 0.80,
+        "HealSpeedMultiplier": 0.90,
+        "ApplySpeedMultiplier": 1.00
+      }
+    },
+    {
+      "TraitCode": "nervous",
+      "Values": {
+        "HpMultiplier": 1.00,
+        "HealSpeedMultiplier": 1.00,
+        "ApplySpeedMultiplier": 0.70
+      }
+    },
+    {
+      "TraitCode": "weak",
+      "Values": {
+        "HpMultiplier": 0.85,
+        "HealSpeedMultiplier": 0.85,
+        "ApplySpeedMultiplier": 1.00
+      }
+    },
+    {
+      "TraitCode": "kind",
+      "Values": {
+        "HpMultiplier": 1.00,
+        "HealSpeedMultiplier": 1.00,
+        "ApplySpeedMultiplier": 0.80
+      }
+    },
+    {
+      "TraitCode": "ravenous",
+      "Values": {
+        "HpMultiplier": 0.90,
+        "HealSpeedMultiplier": 0.95,
+        "ApplySpeedMultiplier": 0.90
+      }
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+<Project>
+
+  <!--
+    ══════════════════════════════════════════════════════════════════════════
+    Common.Build.targets
+    Shared MSBuild logic for every HealingHands_<vsver>.csproj.
+
+    Each csproj must define BEFORE importing this file:
+      $(VSVersion)          — e.g. 1.21 or 1.22
+      $(TargetFramework)    — e.g. net8.0 or net10.0
+    ══════════════════════════════════════════════════════════════════════════
+  -->
+
+  <!-- ── Output paths (versioned so both builds coexist) ──────────────────── -->
+  <PropertyGroup>
+    <OutputDir>bin/$(Configuration)/$(VSVersion)/Mods</OutputDir>
+    <OutputPath>$(OutputDir)/$(ModId)</OutputPath>
+  </PropertyGroup>
+
+  <!-- ── Game installation path resolution ────────────────────────────────── -->
+  <PropertyGroup>
+    <OverhaulLibDir Condition="'$(OverhaulLibDir)' == ''">$(GameDirectory)/Mods/overhaullib</OverhaulLibDir>
+  </PropertyGroup>
+
+  <!-- ── Assembly references ───────────────────────────────────────────────── -->
+  <ItemGroup>
+    <Reference Include="VintagestoryAPI" HintPath="$(GameDirectory)/VintagestoryAPI.dll"     Private="false" />
+    <Reference Include="VintagestoryLib" HintPath="$(GameDirectory)/VintagestoryLib.dll"     Private="false" />
+    <Reference Include="VSSurvivalMod"   HintPath="$(GameDirectory)/Mods/VSSurvivalMod.dll"  Private="false" />
+    <Reference Include="VSEssentials"    HintPath="$(GameDirectory)/Mods/VSEssentials.dll"   Private="false" />
+    <Reference Include="Newtonsoft.Json" HintPath="$(GameDirectory)/Lib/Newtonsoft.Json.dll" Private="false" />
+    <!-- Any extra DLLs dropped into the /external folder are picked up automatically -->
+    <Reference Include="$(ExternalLibDir)/**/*.dll" Private="false"
+               Condition="Exists('$(ExternalLibDir)')" />
+  </ItemGroup>
+
+  <!-- ── Generate modinfo.json ─────────────────────────────────────────────── -->
+  <Target Name="GenerateModInfo" BeforeTargets="Build">
+    <PropertyGroup>
+      <ModInfoContent>
+        {
+        "type": "$(ModType)",
+        "name": "$(ModName)",
+        "modid": "$(ModId)",
+        "version": "$(ModVersion)",
+        "description": "$(Description)",
+        "authors": [ @(ModInfoAuthors->'&quot;%(Identity)&quot;', ', ') ],
+        "dependencies": {
+        "game": "1.21.0"
+        },
+        "side": "$(Side)",
+        "requiredOnClient": $(RequiredOnClient),
+        "requiredOnServer": $(RequiredOnServer)
+        }
+      </ModInfoContent>
+    </PropertyGroup>
+    <MakeDir Directories="$(OutputPath)" />
+    <WriteLinesToFile File="$(OutputPath)/modinfo.json"
+                      Lines="$(ModInfoContent)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+  </Target>
+
+  <!-- ── Symlink assets into output folder ─────────────────────────────────── -->
+  <Target Name="LinkAssets" AfterTargets="GenerateModInfo" BeforeTargets="Build">
+    <RemoveDir Directories="$(OutputPath)/assets" />
+    <Exec Condition="'$(OS)' == 'Windows_NT'"
+          Command="mklink /D &quot;$(OutputPath)\assets&quot; &quot;$(AssetsDir)&quot;" />
+    <Exec Condition="'$(OS)' != 'Windows_NT'"
+          Command="ln -sf &quot;$(AssetsDir)&quot; &quot;$(OutputPath)/assets&quot;" />
+  </Target>
+
+  <!-- ── Package release zip ───────────────────────────────────────────────── -->
+  <Target Name="ZipRelease" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <MakeDir Directories="$(ProjectDir)/Releases" />
+    <Delete Files="$(ProjectDir)/Releases/$(ModId)_$(ModVersion)_vs$(VSVersion).zip" />
+
+    <Delete Files="$(OutputPath)/$(ModId).pdb" />
+    <Delete Files="$(OutputPath)/$(ModId).deps.json" />
+
+    <Exec Condition="'$(OS)' == 'Windows_NT'"
+          Command="powershell -Command &quot;Compress-Archive -Path '$(OutputPath)\*' -DestinationPath '$(ProjectDir)\Releases\$(ModId)_$(ModVersion)_vs$(VSVersion).zip' -Force&quot;" />
+    <Exec Condition="'$(OS)' != 'Windows_NT'"
+          Command="cd '$(OutputPath)' &amp;&amp; zip -r '$(ProjectDir)/Releases/$(ModId)_$(ModVersion)_vs$(VSVersion).zip' ." />
+  </Target>
+
+</Project>

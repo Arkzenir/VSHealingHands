@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    Copy this file to Properties/localSettings.props (git-ignored) and fill in your paths.
+
+    On Windows, typical paths:
+      C:\Program Files\Vintagestory
+      C:\Users\YourName\AppData\Roaming\VintagestoryData\Mods\overhaullib
+
+    On Linux, typical paths:
+      /home/yourname/.local/share/vintagestory
+  -->
+  <PropertyGroup>
+    <!-- Path to the Vintage Story 1.21.x installation directory -->
+    <GameDirectory_1_21></GameDirectory_1_21>
+
+    <!-- Path to the Vintage Story 1.22.x installation directory -->
+    <GameDirectory_1_22></GameDirectory_1_22>
+  </PropertyGroup>
+</Project>
