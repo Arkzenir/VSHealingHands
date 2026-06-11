@@ -1,93 +1,92 @@
 {
   "Enabled": true,
-  "OnlyAffectOtherPlayerHeals": true,
   "CompoundingMode": "Additive",
   "MinMultiplier": 0.05,
   "MaxMultiplier": 10.0,
   "Defaults": {
-    "HpMultiplier": 1.10,
-    "HealSpeedMultiplier": 1.10,
-    "ApplySpeedMultiplier": 1.10
+    "HpMultiplier": 1.25,
+    "HealSpeedMultiplier": 1.25,
+    "ApplySpeedMultiplier": 1.25
   },
   "TraitModifiers": [
     {
+      "TraitCode": "soldier",
+      "Values": {
+        "HpMultiplier": 1.25,
+        "HealSpeedMultiplier": 1.0,
+        "ApplySpeedMultiplier": 1.55
+      }
+    },
+    {
       "TraitCode": "hardy",
       "Values": {
-        "HpMultiplier": 1.20,
-        "HealSpeedMultiplier": 1.15,
-        "ApplySpeedMultiplier": 1.00
+        "HpMultiplier": 1.45,
+        "HealSpeedMultiplier": 1.35,
+        "ApplySpeedMultiplier": 1.0
       }
     },
     {
       "TraitCode": "mender",
       "Values": {
-        "HpMultiplier": 1.10,
-        "HealSpeedMultiplier": 1.10,
-        "ApplySpeedMultiplier": 1.30
-      }
-    },
-    {
-      "TraitCode": "resourceful",
-      "Values": {
         "HpMultiplier": 1.25,
-        "HealSpeedMultiplier": 1.00,
-        "ApplySpeedMultiplier": 1.00
-      }
-    },
-    {
-      "TraitCode": "soldier",
-      "Values": {
-        "HpMultiplier": 1.10,
-        "HealSpeedMultiplier": 1.00,
-        "ApplySpeedMultiplier": 1.25
+        "HealSpeedMultiplier": 1.25,
+        "ApplySpeedMultiplier": 1.65
       }
     },
     {
       "TraitCode": "furtive",
       "Values": {
-        "HpMultiplier": 1.00,
-        "HealSpeedMultiplier": 1.00,
-        "ApplySpeedMultiplier": 1.20
+        "HpMultiplier": 1.0,
+        "HealSpeedMultiplier": 1.0,
+        "ApplySpeedMultiplier": 1.45
+      }
+    },
+    {
+      "TraitCode": "resourceful",
+      "Values": {
+        "HpMultiplier": 1.55,
+        "HealSpeedMultiplier": 1.0,
+        "ApplySpeedMultiplier": 1.0
       }
     },
     {
       "TraitCode": "frail",
       "Values": {
-        "HpMultiplier": 0.80,
-        "HealSpeedMultiplier": 0.90,
-        "ApplySpeedMultiplier": 1.00
+        "HpMultiplier": 0.65,
+        "HealSpeedMultiplier": 0.8,
+        "ApplySpeedMultiplier": 1.0
       }
     },
     {
       "TraitCode": "nervous",
       "Values": {
-        "HpMultiplier": 1.00,
-        "HealSpeedMultiplier": 1.00,
-        "ApplySpeedMultiplier": 0.70
+        "HpMultiplier": 1.0,
+        "HealSpeedMultiplier": 1.0,
+        "ApplySpeedMultiplier": 0.55
       }
     },
     {
       "TraitCode": "weak",
       "Values": {
-        "HpMultiplier": 0.85,
-        "HealSpeedMultiplier": 0.85,
-        "ApplySpeedMultiplier": 1.00
+        "HpMultiplier": 0.7,
+        "HealSpeedMultiplier": 0.7,
+        "ApplySpeedMultiplier": 1.0
       }
     },
     {
       "TraitCode": "kind",
       "Values": {
-        "HpMultiplier": 1.00,
-        "HealSpeedMultiplier": 1.00,
-        "ApplySpeedMultiplier": 0.80
+        "HpMultiplier": 1.0,
+        "HealSpeedMultiplier": 1.0,
+        "ApplySpeedMultiplier": 0.65
       }
     },
     {
       "TraitCode": "ravenous",
       "Values": {
-        "HpMultiplier": 0.90,
-        "HealSpeedMultiplier": 0.95,
-        "ApplySpeedMultiplier": 0.90
+        "HpMultiplier": 0.8,
+        "HealSpeedMultiplier": 0.9,
+        "ApplySpeedMultiplier": 0.8
       }
     }
   ]

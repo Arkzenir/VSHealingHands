@@ -8,48 +8,45 @@ using Vintagestory.GameContent;
 namespace HealingHands;
 
 /// <summary>
-/// Entry point for the HealingHands mod.
+/// Entry point and lifecycle owner for the HealingHands mod.
 ///
-/// <para><b>Architecture</b></para>
-/// <para>
-/// Two complementary mechanisms handle the three healing parameters.
-/// The shared <c>BehaviorHealingItem.Config</c> object is <b>never mutated</b>.
-/// </para>
+/// <para><b>What the mod does.</b> When one player uses a healing item on another player,
+/// the heal's HP amount, heal-over-time speed, and application (cast) speed are adjusted
+/// based on the healer's character traits. Self-heals are never affected. The mod is
+/// server-authoritative and requires no client installation.</para>
 ///
+/// <para><b>How it works.</b> Two cooperating behaviors do the work, and neither ever
+/// mutates the shared <c>BehaviorHealingItem.Config</c> object:</para>
 /// <list type="number">
 ///   <item>
-///     <term><see cref="HealingInterceptBehavior"/> — CollectibleBehavior, prepended at index 0</term>
+///     <term><see cref="HealingInterceptBehavior"/> — a CollectibleBehavior prepended onto
+///     every healing item</term>
 ///     <description>
-///       Runs before <c>BehaviorHealingItem</c> on every callback.<br/>
-///       • <b>Start:</b> resolves target, computes modifier, sets a
-///       <c>healingeffectivness</c> stat delta on the healer so vanilla's
-///       <c>GetApplicationTime</c> produces the modified cast duration.<br/>
-///       • <b>Stop:</b> installs a <see cref="HealReceiveBehavior.SetPending"/> context on the
-///       target <em>before</em> vanilla's Stop calls <c>ReceiveDamage</c>, then schedules a
-///       0 ms callback to remove the stat after the full Stop chain completes.<br/>
-///       • <b>Cancel:</b> clears context and schedules stat removal.
+///       In <c>Start</c> it sets a temporary <c>healingeffectivness</c> stat on the healer
+///       so vanilla's own application-time formula produces the modified cast speed.
+///       In <c>Stop</c> it hands the resolved modifier to the target's
+///       <see cref="HealReceiveBehavior"/> just before vanilla applies the heal.
 ///     </description>
 ///   </item>
 ///   <item>
-///     <term><see cref="HealReceiveBehavior"/> — EntityBehavior on every player entity</term>
+///     <term><see cref="HealReceiveBehavior"/> — an EntityBehavior on every player</term>
 ///     <description>
-///       Overrides <c>OnEntityReceiveDamage</c>. When a pending context is present (set by
-///       <see cref="HealingInterceptBehavior"/>), scales <c>ref float damage</c> (HP) and
-///       mutates <c>damageSource.Duration</c> (HoT speed) before
-///       <c>EntityBehaviorHealth</c> applies them. Context is consumed on first read.
+///       In <c>OnEntityReceiveDamage</c> it scales the HP amount and heal-over-time speed
+///       of the pending heal before the health system applies them.
 ///     </description>
 ///   </item>
 /// </list>
 ///
-/// <para><b>Defaults vs traits</b><br/>
-/// <see cref="HealingHandsConfig.Defaults"/> applies when the healer has zero matching traits.
-/// The moment one or more traits match, defaults are ignored entirely.
-/// </para>
+/// <para><b>Lifecycle.</b> <see cref="Start"/> registers both behavior classes and loads the
+/// config. <see cref="AssetsFinalize"/> injects <see cref="HealingInterceptBehavior"/> into
+/// every healing collectible. <see cref="StartServerSide"/> registers commands and wires up
+/// player join/leave so each player gets a <see cref="HealReceiveBehavior"/>.</para>
 /// </summary>
 public class HealingHandsModSystem : ModSystem
 {
     // ── Public ────────────────────────────────────────────────────────────────
 
+    /// <summary>The active config. Backed by the current system instance so a reload is visible immediately.</summary>
     public HealingHandsConfig Config => _system?.Config ?? _pendingConfig;
 
     // ── Private ───────────────────────────────────────────────────────────────
@@ -58,15 +55,19 @@ public class HealingHandsModSystem : ModSystem
     private HealingHandsSystem? _system;
     private HealingHandsConfig _pendingConfig = new();
 
-    // Per-player behavior instances so we can remove the correct instance on leave.
+    // One HealReceiveBehavior instance per online player, kept so we can remove the exact
+    // instance we added when the player leaves.
     private readonly Dictionary<string, HealReceiveBehavior> _receiveBehaviors = new();
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     public override void Start(ICoreAPI api)
     {
-        // Register on both sides so class names survive item-type / entity network packets.
-        // Client instances of both behaviors are inert (all logic guards EnumAppSide.Server).
+        // Register both classes by name on whichever side this runs. The names must exist in
+        // the registry so item-type and entity network packets can be deserialized; on a
+        // client that has the mod, the instances created this way are inert because every
+        // callback guards on EnumAppSide.Server. (Clients without the mod skip
+        // HealingInterceptBehavior entirely thanks to its ClientSideOptional override.)
         api.RegisterCollectibleBehaviorClass("HealingInterceptBehavior", typeof(HealingInterceptBehavior));
         api.RegisterEntityBehaviorClass("healinghands:healreceive",      typeof(HealReceiveBehavior));
 
@@ -79,6 +80,8 @@ public class HealingHandsModSystem : ModSystem
 
     public override void AssetsFinalize(ICoreAPI api)
     {
+        // Injection is server-only; clients receive the updated behavior list via packets.
+        // By AssetsFinalize the full item and block registries are populated.
         if (api.Side != EnumAppSide.Server || _system == null) return;
 
         int injected = 0;
@@ -108,11 +111,14 @@ public class HealingHandsModSystem : ModSystem
 
     // ── Config ─────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Reloads the config from disk and swaps in a fresh <see cref="HealingHandsSystem"/>.
+    /// Existing behaviors call back through the modifier delegate, which reads the current
+    /// system instance, so they pick up the new config on the next heal with no re-injection.
+    /// </summary>
     internal void ReloadConfig(ICoreServerAPI api)
     {
         _pendingConfig = LoadConfig(api);
-        // Swapping _system propagates the new config to all existing behavior closures
-        // on the next heal, since they capture `this` and read _system at call time.
         _system = new HealingHandsSystem(api, _pendingConfig);
         api.Logger.Notification("[HealingHands] Config reloaded.");
     }
@@ -151,6 +157,8 @@ public class HealingHandsModSystem : ModSystem
             return;
         }
 
+        // Every player carries a HealReceiveBehavior so that heals targeting them can be
+        // intercepted in OnEntityReceiveDamage.
         HealReceiveBehavior behavior = new(player.Entity);
         player.Entity.AddBehavior(behavior);
         _receiveBehaviors[player.PlayerUID] = behavior;
@@ -164,12 +172,17 @@ public class HealingHandsModSystem : ModSystem
 
     // ── CollectibleBehavior injection ──────────────────────────────────────────
 
+    /// <summary>
+    /// Prepends a <see cref="HealingInterceptBehavior"/> onto <paramref name="col"/> if it is
+    /// a healing item that has not already been injected. Returns true if injection happened.
+    /// </summary>
     private bool TryInjectInterceptBehavior(CollectibleObject? col)
     {
         if (col == null) return false;
         if (col.GetCollectibleBehavior<HealingInterceptBehavior>(withInheritance: false) != null) return false;
 
-        // BehaviorHealingItem is a public type in VS 1.21 exposing a typed Config.
+        // BehaviorHealingItem is the public healing behavior in VS 1.21, exposing a typed
+        // Config. Only inject into items that actually restore health.
         BehaviorHealingItem? healBehavior =
             col.GetCollectibleBehavior<BehaviorHealingItem>(withInheritance: true);
         if (healBehavior == null || healBehavior.Config.Health <= 0f) return false;
@@ -179,8 +192,9 @@ public class HealingHandsModSystem : ModSystem
             (healer, target) => _system!.ComputeModifier(healer, target),
             _serverApi!.Logger);
 
-        // PREPEND at index 0 so our Start fires before BehaviorHealingItem sets
-        // PreventSubsequent, and our Stop fires before vanilla's Stop calls ReceiveDamage.
+        // Prepend at index 0. This is required so our Start runs before BehaviorHealingItem's
+        // Start sets EnumHandling.PreventSubsequent (which would otherwise abort the loop
+        // before we run), and so our Stop runs before vanilla's Stop calls ReceiveDamage.
         CollectibleBehavior[] old     = col.CollectibleBehaviors;
         CollectibleBehavior[] updated = new CollectibleBehavior[old.Length + 1];
         updated[0] = intercept;

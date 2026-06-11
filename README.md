@@ -1,82 +1,98 @@
 # HealingHands
 
-A server-side Vintage Story mod that changes how healing items work when used on other players, based on the healer's character traits.
+A server-side Vintage Story mod (1.21) that changes how healing items behave when one
+player uses them on **another** player, based on the healer's character traits.
 
-## Overview
+A skilled healer can restore more health, finish the heal faster, and apply the bandage more
+quickly; a clumsy or frail one does the opposite. Healing yourself is never affected — the mod
+only acts when the target is a different player. No client installation is required.
 
-When a player uses a healing item on another player, HealingHands checks the healer's traits against the configured list and adjusts three aspects of the heal:
+---
 
-- **HP amount** — how much health the item restores
-- **Heal-over-time speed** — how quickly the ticks resolve after the item is applied
-- **Application speed** — how long the healer must hold the item before it fires
+## What gets modified
 
-Self-heals are never affected. The mod is entirely server-side and requires no client installation.
+Every heal from one player to another has three parts, and HealingHands can scale each one
+independently:
 
-## Trait modifiers
-
-Each entry in `TraitModifiers` maps a trait code to a set of multipliers. When the healer has none of the listed traits, the `Defaults` block is used instead. As soon as one or more listed traits are present, defaults are ignored and only the matching trait values apply — compounded if there are multiple.
-
-### Compounding
-
-| Mode | Behaviour |
-|---|---|
-| `Multiplicative` | Each multiplier chains: m₁ × m₂ × … × mN |
-| `Additive` | Deltas from 1.0 sum: 1 + (m₁−1) + (m₂−1) + … |
-| `Highest` | Only the single highest value per parameter applies |
-
-`MinMultiplier` and `MaxMultiplier` clamp the final result after compounding.
-
-### Multiplier reference
-
-| Field | Effect of values above 1.0 | Effect of values below 1.0 |
+| Part | Config field | What it controls |
 |---|---|---|
-| `HpMultiplier` | More HP restored | Less HP restored |
-| `HealSpeedMultiplier` | HoT ticks arrive faster | HoT ticks arrive slower |
-| `ApplySpeedMultiplier` | Item applies faster (shorter cast) | Item applies slower (longer cast) |
+| **Health restored** | `HpMultiplier` | The total HP the item gives the target. |
+| **Healing speed** | `HealSpeedMultiplier` | How quickly the heal-over-time ticks resolve once applied. The *same* total HP is delivered, just faster or slower. |
+| **Application speed** | `ApplySpeedMultiplier` | How long the healer must hold the item before the heal fires (the cast time). |
 
-### healingeffectivness
+For each one, a multiplier of **1.0 means no change**, **above 1.0 is an improvement** (more
+HP, faster ticks, faster cast), and **below 1.0 is a penalty**.
 
-Vintage Story tracks a `healingeffectivness` stat on every player (the vanilla typo is intentional — the game spells it this way). This stat already influences cast time through the vanilla item system. HealingHands feeds the `ApplySpeedMultiplier` into this same stat so the two systems work together naturally rather than independently.
+> Application speed is implemented through the vanilla `healingeffectivness` stat, which the
+> game already uses to decide cast time. The mod adds its contribution on top of that stat for
+> the duration of the cast, so it stacks with — rather than overwrites — any bonus the healer
+> already has from armor, food, or other sources. (`healingeffectivness` is spelled exactly
+> like that in vanilla, typo included.)
 
-## Default trait list
+---
 
-The shipped config covers five positive and five negative vanilla traits:
+## Defaults vs. traits
 
-| Trait | Type | HP | HoT speed | Apply speed |
-|---|---|---|---|---|
-| `hardy` | positive | +20% | +15% | — |
-| `mender` | positive | +10% | +10% | +30% |
-| `resourceful` | positive | +25% | — | — |
-| `soldier` | positive | +10% | — | +25% |
-| `furtive` | positive | — | — | +20% |
-| `frail` | negative | −20% | −10% | — |
-| `nervous` | negative | — | — | −30% |
-| `weak` | negative | −15% | −15% | — |
-| `kind` | negative | — | — | −20% |
-| `ravenous` | negative | −10% | −5% | −10% |
+For any heal, the mod chooses which multipliers to use in one of two ways:
+
+- **The healer has none of the configured traits** → the **`Defaults`** block is used. Out of
+  the box that's a flat **+25%** to all three parameters, so even an untraited player heals
+  others noticeably better than the item's base numbers.
+- **The healer has one or more configured traits** → the `Defaults` are ignored entirely, and
+  only the matching traits' values are used (combined together if there's more than one — see
+  below).
+
+---
+
+## Compounding modes
+
+When a healer has **several** matching traits, their multipliers have to be merged into one
+value per parameter. There are **three** modes, set by `CompoundingMode`:
+
+| Mode | Formula | Behaviour |
+|---|---|---|
+| **`Additive`** *(default)* | `1 + (m₁−1) + (m₂−1) + … + (mₙ−1)` | Each trait's distance from 1.0 is summed. A +25% trait and a −15% trait net to **+10%**. Bonuses and penalties cancel out linearly, so stacking many traits stays controlled. |
+| **`Multiplicative`** | `m₁ × m₂ × … × mₙ` | The multipliers chain. ×1.25 and ×1.15 give **×1.4375**. Bonuses compound on each other, so stacking grows faster than additive. |
+| **`Highest`** | `max(m₁, m₂, …, mₙ)` | No stacking at all — only the single largest multiplier for each parameter is used. |
+
+After compounding, every result is clamped between `MinMultiplier` and `MaxMultiplier`.
+
+**Worked example** — a healer with `mender` (HP ×1.25) and `frail` (HP ×0.65), default
+`Additive` mode:
+
+```
+1 + (1.25 − 1) + (0.65 − 1) = 1 + 0.25 − 0.35 = 0.90   →  10% less HP restored
+```
+
+Switch to `Multiplicative` and the same pair gives `1.25 × 0.65 = 0.8125`; switch to `Highest`
+and it gives `1.25` (the larger of the two).
+
+---
 
 ## Configuration
 
-The config file is written to `ModConfig/healinghands.json` on first run and can be edited freely. Changes take effect immediately with `/healinghands reload` — no server restart needed.
+The config is written to `ModConfig/healinghands.json` on first run and can be edited freely.
+Run `/healinghands reload` to apply changes without a restart; they take effect on the next
+heal.
 
 ```json
 {
   "Enabled": true,
-  "OnlyAffectOtherPlayerHeals": true,
   "CompoundingMode": "Additive",
   "MinMultiplier": 0.05,
   "MaxMultiplier": 10.0,
   "Defaults": {
-    "HpMultiplier": 1.10,
-    "HealSpeedMultiplier": 1.10,
-    "ApplySpeedMultiplier": 1.10
+    "HpMultiplier": 1.25,
+    "HealSpeedMultiplier": 1.25,
+    "ApplySpeedMultiplier": 1.25
   },
   "TraitModifiers": [
     {
       "TraitCode": "hardy",
+      "Comment": "Robust constitution.",
       "Values": {
-        "HpMultiplier": 1.20,
-        "HealSpeedMultiplier": 1.15,
+        "HpMultiplier": 1.45,
+        "HealSpeedMultiplier": 1.35,
         "ApplySpeedMultiplier": 1.00
       }
     }
@@ -84,23 +100,84 @@ The config file is written to `ModConfig/healinghands.json` on first run and can
 }
 ```
 
-Trait codes must exactly match the keys stored in `entity.WatchedAttributes["traits"]`. Vanilla codes come from `assets/game/config/characterclasses.json`. Modded trait codes work identically — any trait that follows the same storage convention is supported. Unrecognised codes are silently ignored.
+### Field reference
+
+| Field | Meaning |
+|---|---|
+| `Enabled` | Master switch. When `false`, the mod does nothing and every heal uses the item's base values. |
+| `CompoundingMode` | How multiple matching traits combine: `Additive`, `Multiplicative`, or `Highest` (see above). |
+| `MinMultiplier` / `MaxMultiplier` | Lower and upper clamps applied to every final multiplier after compounding. Keep extreme trait stacks in check. |
+| `Defaults` | The three multipliers used when the healer has **none** of the listed traits. |
+| `TraitModifiers` | The list of traits that change healing. Each entry has a `TraitCode`, an optional `Comment`, and a `Values` block. |
+
+Each `Values` block (and the `Defaults` block) holds the three multipliers `HpMultiplier`,
+`HealSpeedMultiplier`, and `ApplySpeedMultiplier`, described in the table near the top.
+
+> There is intentionally **no** "only affect other-player heals" option. The mod's entire job
+> is healing applied to another player — self-heals and non-player targets are skipped in code,
+> so the only switch needed is `Enabled`.
+
+### Trait codes
+
+`TraitCode` must match a key in the healer's `WatchedAttributes["traits"]`. Vanilla codes come
+from `assets/game/config/characterclasses.json`. **Modded traits work the same way** — any
+trait stored under that key can be listed. Codes that no player has are simply ignored, so
+listing a trait that isn't present is harmless.
+
+The bundled config ships with ten vanilla traits, five positive and five negative:
+
+| Trait | Type | HP | Healing speed | Application speed |
+|---|---|---|---|---|
+| `hardy` | positive | +45% | +35% | — |
+| `resourceful` | positive | +55% | — | — |
+| `soldier` | positive | +25% | — | +55% |
+| `mender` | positive | +25% | +25% | +65% |
+| `furtive` | positive | — | — | +45% |
+| `frail` | negative | −35% | −20% | — |
+| `weak` | negative | −30% | −30% | — |
+| `ravenous` | negative | −20% | −10% | −20% |
+| `kind` | negative | — | — | −35% |
+| `nervous` | negative | — | — | −45% |
+
+---
 
 ## Commands
 
-All commands require the `commandplayer` privilege.
+Both require the `commandplayer` privilege.
 
 | Command | Description |
 |---|---|
-| `/healinghands checktraits <player>` | Shows which configured traits the named player has and the combined modifier they produce |
-| `/healinghands reload` | Reloads `ModConfig/healinghands.json` from disk |
+| `/healinghands checktraits <player>` | Lists the configured traits the player has and the combined modifier they would produce when healing another player. |
+| `/healinghands reload` | Reloads `ModConfig/healinghands.json` from disk. |
+
+---
 
 ## Building
 
-Copy `Properties/localSettings.props.template` to `Properties/localSettings.props`, set your Vintage Story installation path, then:
+This is the **1.21** branch. Copy `Properties/localSettings.props.template` to
+`Properties/localSettings.props`, set your Vintage Story install path, then:
 
 ```sh
 dotnet build HealingHands_1.21.csproj
-dotnet build HealingHands_1.22.csproj
-dotnet build HealingHands_1.22.csproj -c Release
+dotnet build HealingHands_1.21.csproj -c Release
 ```
+
+---
+
+## How it works internally
+
+Two behaviors cooperate, and neither mutates the shared healing-item definition:
+
+- **`HealingInterceptBehavior`** is prepended onto every healing item. Prepending is required
+  because vanilla's healing behavior halts the behavior loop once it runs, so anything added
+  after it would never fire. In `Start` it sets the temporary `healingeffectivness` stat for
+  application speed; in `Stop` it hands the resolved modifier to the target just before the
+  heal is applied; in both it schedules the stat's removal on the next tick (guarded so a
+  quickly-restarted cast doesn't lose its stat).
+- **`HealReceiveBehavior`** sits on every player. When a heal lands and a modifier has been
+  handed to it, it scales the HP amount and heal-over-time duration before the health system
+  applies them.
+
+The hand-off between the two happens synchronously on the server thread, so exactly one
+modifier is ever in flight per target, and separate players healing separate targets never
+interfere with each other.
