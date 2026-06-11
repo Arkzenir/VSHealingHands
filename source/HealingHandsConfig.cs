@@ -51,7 +51,7 @@ public class HealingHandsConfig
     /// </list>
     /// Default: Multiplicative.
     /// </summary>
-    public CompoundingMode CompoundingMode { get; set; } = CompoundingMode.Multiplicative;
+    public CompoundingMode CompoundingMode { get; set; } = CompoundingMode.Additive;
 
     /// <summary>Minimum allowed final multiplier. Default: 0.05.</summary>
     public float MinMultiplier { get; set; } = 0.05f;
@@ -70,17 +70,19 @@ public class HealingHandsConfig
     {
         Enabled                    = true,
         OnlyAffectOtherPlayerHeals = true,
-        CompoundingMode            = CompoundingMode.Multiplicative,
+        CompoundingMode            = CompoundingMode.Additive,
         MinMultiplier              = 0.05f,
         MaxMultiplier              = 10.0f,
 
         // Defaults: applied when the healer has NONE of the listed traits.
         // 1.0 on all multipliers means the item's authored values are used as-is.
+        // Outline: "Everyone applies bandages 10% better on others, compared to themselves."
+        // These defaults apply when the healer has NONE of the configured traits.
         Defaults = new HealingValues
         {
-            HpMultiplier         = 1.0f,
-            HealSpeedMultiplier  = 1.0f,
-            ApplySpeedMultiplier = 1.0f
+            HpMultiplier         = 1.10f,
+            HealSpeedMultiplier  = 1.10f,
+            ApplySpeedMultiplier = 1.10f
         },
 
         TraitModifiers =

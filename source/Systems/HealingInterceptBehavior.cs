@@ -1,6 +1,5 @@
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
-using Vintagestory.API.Datastructures;
 using Vintagestory.API.Server;
 using Vintagestory.GameContent;
 
@@ -38,9 +37,10 @@ namespace HealingHands.Systems;
 /// touching any state.</para>
 ///
 /// <para><b>Isolation across concurrent uses of the same item type.</b><br/>
-/// This behavior is one instance per item type. State is stored in _statSetForHealer,
-/// a HashSet keyed by healer entity ID. HealReceiveBehavior instances are per-target-entity
-/// and hold a single nullable HealModifier field.</para>
+/// This behavior is one instance per item type. State is stored in _castGeneration,
+/// a per-healer generation counter that guards against the stat-removal stacking race.
+/// HealReceiveBehavior instances are per-target-entity and hold a single nullable
+/// HealModifier field.</para>
 /// </summary>
 public sealed class HealingInterceptBehavior : CollectibleBehavior
 {
@@ -53,9 +53,13 @@ public sealed class HealingInterceptBehavior : CollectibleBehavior
     private readonly System.Func<Entity, Entity, HealModifier>? _computeModifier;
     private readonly ILogger? _logger;
 
-    // Tracks which healer entity IDs have had their healingeffectivness stat modified
-    // by us during the current cast, so we only schedule removal for stats we actually set.
-    private readonly HashSet<long> _statSetForHealer = new();
+    // Tracks the active cast "generation" per healer entity ID. Each time a healer begins
+    // a cast that sets our stat, the generation is incremented. The deferred removal callback
+    // captures the generation at schedule time and only removes the stat if it still matches —
+    // i.e. the healer has not begun a newer cast in the meantime. This prevents the
+    // stacking race where a quickly-restarted cast has its stat removed early by the previous
+    // cast's pending callback (the same class of bug documented in CombatSlowExtended).
+    private readonly Dictionary<long, int> _castGeneration = new();
 
     // Cached result of GetHealingBehaviorAffectedByArmor() — constant per item type.
     // null = not yet evaluated, true/false = result.
@@ -91,10 +95,9 @@ public sealed class HealingInterceptBehavior : CollectibleBehavior
 
         HealModifier mod = _computeModifier(byEntity, target);
 
-        // Only touch the stat when the item reads it (AffectedByArmor == true in the
-        // behavior's JSON config) and the trait modifier changes cast time.
-        // We locate the healing behavior and read AffectedByArmor at runtime to avoid
-        // a compile-time dependency on BehaviorHealingItem
+        // Only touch the stat when the item actually reads it (AffectedByArmor == true)
+        // and the trait modifier changes cast time. GetApplicationTime ignores the stat
+        // entirely when AffectedByArmor is false, so setting it then would be wasted work.
         if (mod.ApplySpeedMultiplier != 1.0f && GetHealingBehaviorAffectedByArmor())
         {
             // GetApplicationTime:  effectiveness = Clamp(GetBlended(), 0, 2) - 1
@@ -103,7 +106,7 @@ public sealed class HealingInterceptBehavior : CollectibleBehavior
             // → GetBlended returns 1 + delta = ApplySpeedMultiplier
             float delta = mod.ApplySpeedMultiplier - 1.0f;
             byEntity.Stats.Set("healingeffectivness", "healinghands", delta, persistent: false);
-            _statSetForHealer.Add(byEntity.EntityId);
+            _castGeneration[byEntity.EntityId] = _castGeneration.GetValueOrDefault(byEntity.EntityId) + 1;
         }
 
         // Do NOT set handling — leave PassThrough so the loop continues to
@@ -178,15 +181,32 @@ public sealed class HealingInterceptBehavior : CollectibleBehavior
 
     private void ScheduleStatRemoval(EntityAgent byEntity)
     {
-        if (!_statSetForHealer.Remove(byEntity.EntityId)) return;
+        long id = byEntity.EntityId;
+
+        // Only schedule removal if we actually set the stat for this healer.
+        if (!_castGeneration.TryGetValue(id, out int generation)) return;
+
+        // Defer removal to the next game tick (0ms) so vanilla's Stop guard, which reads
+        // GetApplicationTime (and thus the stat), still sees our value during the current
+        // Stop chain. The callback captures the generation at schedule time: if the healer
+        // begins a new cast before the callback fires, the generation will have advanced
+        // and we skip removal so the newer cast keeps its stat.
         byEntity.World.RegisterCallback(_ =>
-            byEntity.Stats.Remove("healingeffectivness", "healinghands"), 0);
+        {
+            if (_castGeneration.TryGetValue(id, out int current) && current == generation)
+            {
+                byEntity.Stats.Remove("healingeffectivness", "healinghands");
+                _castGeneration.Remove(id);
+            }
+        }, 0);
     }
 
     /// <summary>
-    /// Returns the AffectedByArmor flag
-    /// Result is cached after the first call since the behavior list is fixed per item type.
-    /// Defaults to true if the behavior or property cannot be found.
+    /// Returns the AffectedByArmor flag from the item's BehaviorHealingItem config.
+    /// In VS 1.21, BehaviorHealingItem is a public type in Vintagestory.GameContent
+    /// exposing a typed Config (HealOverTimeConfig). Result is cached after the first
+    /// call since the behavior list is fixed per item type.
+    /// Defaults to true if the behavior cannot be found.
     /// </summary>
     private bool GetHealingBehaviorAffectedByArmor()
     {
@@ -195,28 +215,8 @@ public sealed class HealingInterceptBehavior : CollectibleBehavior
         BehaviorHealingItem? healBehavior =
             collObj.GetCollectibleBehavior<BehaviorHealingItem>(withInheritance: true);
 
-        if (healBehavior == null)
-        {
-            _affectedByArmor = true;
-            return true;
-        }
-
-        // AffectedByArmor is not a direct property on CollectibleBehaviorHealingItem but is
-        // still stored in the JSON config. Read it from propertiesAtString — the raw JSON
-        // stored by CollectibleBehavior.Initialize(). Defaults to true (matching the vanilla default).
-        if (!string.IsNullOrWhiteSpace(healBehavior.propertiesAtString))
-        {
-            try
-            {
-                JsonObject props = JsonObject.FromJson(healBehavior.propertiesAtString);
-                _affectedByArmor = props["affectedByArmor"].AsBool(defaultValue: true);
-                return _affectedByArmor.Value;
-            }
-            catch { /* malformed JSON — fall through to default */ }
-        }
-
-        _affectedByArmor = true;
-        return true;
+        _affectedByArmor = healBehavior?.Config.AffectedByArmor ?? true;
+        return _affectedByArmor.Value;
     }
 
     private static Entity ResolveTarget(EntityAgent byEntity, EntitySelection? entitySel, ItemSlot slot)

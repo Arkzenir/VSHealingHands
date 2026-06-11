@@ -169,6 +169,7 @@ public class HealingHandsModSystem : ModSystem
         if (col == null) return false;
         if (col.GetCollectibleBehavior<HealingInterceptBehavior>(withInheritance: false) != null) return false;
 
+        // BehaviorHealingItem is a public type in VS 1.21 exposing a typed Config.
         BehaviorHealingItem? healBehavior =
             col.GetCollectibleBehavior<BehaviorHealingItem>(withInheritance: true);
         if (healBehavior == null || healBehavior.Config.Health <= 0f) return false;

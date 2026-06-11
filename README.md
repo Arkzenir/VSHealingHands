@@ -63,13 +63,13 @@ The config file is written to `ModConfig/healinghands.json` on first run and can
 {
   "Enabled": true,
   "OnlyAffectOtherPlayerHeals": true,
-  "CompoundingMode": "Multiplicative",
+  "CompoundingMode": "Additive",
   "MinMultiplier": 0.05,
   "MaxMultiplier": 10.0,
   "Defaults": {
-    "HpMultiplier": 1.0,
-    "HealSpeedMultiplier": 1.0,
-    "ApplySpeedMultiplier": 1.0
+    "HpMultiplier": 1.10,
+    "HealSpeedMultiplier": 1.10,
+    "ApplySpeedMultiplier": 1.10
   },
   "TraitModifiers": [
     {
