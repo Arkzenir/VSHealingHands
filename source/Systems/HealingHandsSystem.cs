@@ -5,16 +5,17 @@ using Vintagestory.API.Server;
 namespace HealingHands.Systems;
 
 /// <summary>
-/// Owns modifier computation and provides the <see cref="Func{T1,T2,TResult}"/> delegate
-/// that both <see cref="HealReceiveBehavior"/> and <see cref="HealingInterceptBehavior"/> call.
-/// Swapped out atomically on <c>/healinghands reload</c>.
+/// Holds the active config and turns a (healer, target) pair into the <see cref="HealModifier"/>
+/// that should apply to their heal. Both <see cref="HealingInterceptBehavior"/> and the
+/// <c>/healinghands checktraits</c> command resolve modifiers through here.
+/// <para>On <c>/healinghands reload</c> the mod system replaces this whole instance, so callers
+/// always read fresh config without any per-item re-injection.</para>
 /// </summary>
 public sealed class HealingHandsSystem
 {
     private readonly ICoreServerAPI _api;
 
-    // Config reference is read every heal; updated atomically on reload by replacing the
-    // whole HealingHandsSystem instance in HealingHandsModSystem.
+    /// <summary>The config this system was built with.</summary>
     public HealingHandsConfig Config { get; private set; }
 
     public HealingHandsSystem(ICoreServerAPI api, HealingHandsConfig config)
@@ -24,26 +25,18 @@ public sealed class HealingHandsSystem
     }
 
     /// <summary>
-    /// Computes and returns the combined <see cref="HealModifier"/> for the given
-    /// healer→target pair. Returns <see cref="HealModifier.Identity"/> when the mod
-    /// is disabled or the interaction is filtered by
-    /// <see cref="HealingHandsConfig.OnlyAffectOtherPlayerHeals"/>.
+    /// Resolves the combined modifier for <paramref name="healer"/> healing
+    /// <paramref name="target"/>. Returns <see cref="HealModifier.Identity"/> (no change) when
+    /// the mod is disabled, or when the heal is a self-heal — the mod only ever modifies heals
+    /// applied to another player. (Non-player targets are filtered earlier, in
+    /// <see cref="HealingInterceptBehavior"/>.)
     /// </summary>
     public HealModifier ComputeModifier(Entity healer, Entity target)
     {
         if (!Config.Enabled) return HealModifier.Identity;
+        if (healer.EntityId == target.EntityId) return HealModifier.Identity;
 
-        if (Config.OnlyAffectOtherPlayerHeals)
-        {
-            // Skip self-heals and heals on non-players.
-            if (healer.EntityId == target.EntityId) return HealModifier.Identity;
-            if (target is not EntityPlayer)          return HealModifier.Identity;
-        }
-
-        string healerName =
-            healer.GetName()
-            ?? healer.EntityId.ToString();
-
+        string healerName = healer.GetName() ?? healer.EntityId.ToString();
         return HealModifier.Compute(healer, Config, _api.Logger, healerName);
     }
 }

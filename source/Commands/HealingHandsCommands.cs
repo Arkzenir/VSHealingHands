@@ -4,15 +4,13 @@ using Vintagestory.API.Server;
 namespace HealingHands.Commands;
 
 /// <summary>
-/// Registers the <c>/healinghands</c> admin command.
-///
-/// Subcommands:
+/// Registers the <c>/healinghands</c> admin command and its subcommands. Both subcommands
+/// require the <c>commandplayer</c> privilege.
 /// <list type="bullet">
-///   <item><c>checktraits &lt;player&gt;</c> — lists active config traits on a player
-///   and previews the combined modifier.</item>
-///   <item><c>reload</c> — reloads healinghands.json without a server restart.</item>
+///   <item><c>checktraits &lt;player&gt;</c> — shows which configured traits the player has
+///   and the combined modifier they would produce when healing another player.</item>
+///   <item><c>reload</c> — reloads <c>ModConfig/healinghands.json</c> from disk.</item>
 /// </list>
-/// All subcommands require the <c>commandplayer</c> privilege.
 /// </summary>
 internal static class HealingHandsCommands
 {
@@ -27,8 +25,8 @@ internal static class HealingHandsCommands
 
             .BeginSubCommand("checktraits")
                 .WithDescription(
-                    "Lists which trait codes from the config are active on a player and shows\n" +
-                    "the combined modifier they would produce when healing another player.\n" +
+                    "Lists which configured trait codes are active on a player and shows the\n" +
+                    "combined modifier they would produce when healing another player.\n" +
                     "Usage: /healinghands checktraits <player>")
                 .WithArgs(p.OnlinePlayer("player"))
                 .HandleWith(args => HandleCheckTraits(args, modSystem))
@@ -60,6 +58,7 @@ internal static class HealingHandsCommands
             $"Trait check for {target.PlayerName} (compounding: {cfg.CompoundingMode}):"
         };
 
+        // List each configured trait the player actually has.
         bool any = false;
         foreach (TraitModifierConfig entry in cfg.TraitModifiers)
         {
@@ -69,12 +68,12 @@ internal static class HealingHandsCommands
                     $"  ✓ {entry.TraitCode} — " +
                     $"hp×{entry.Values.HpMultiplier:F2}, " +
                     $"healSpeed×{entry.Values.HealSpeedMultiplier:F2}, " +
-                    $"applySpeed×{entry.Values.ApplySpeedMultiplier:F2}" +
-                    (string.IsNullOrEmpty(entry.Comment) ? "" : $"  ({entry.Comment})"));
+                    $"applySpeed×{entry.Values.ApplySpeedMultiplier:F2}");
                 any = true;
             }
         }
 
+        // With no matching traits the defaults apply; otherwise show the compounded result.
         if (!any)
         {
             lines.Add("  (no matching traits — defaults apply)");
@@ -86,7 +85,6 @@ internal static class HealingHandsCommands
         }
         else
         {
-            // Show the compounded result (pass null logger — preview only).
             HealModifier combined = HealModifier.Compute(
                 target.Entity, cfg, logger: null, healerName: target.PlayerName);
 

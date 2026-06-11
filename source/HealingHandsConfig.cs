@@ -4,210 +4,196 @@ using Vintagestory.API.Common.Entities;
 namespace HealingHands;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Top-level config
+// HealingHandsConfig — the root configuration object
+//
+// Deserialized from ModConfig/healinghands.json. Everything the server admin can
+// tune lives here. The mod only ever acts when one player heals a DIFFERENT player;
+// self-heals and non-player targets are filtered out in code, so there is no config
+// switch for that — turning the mod off entirely is what `Enabled` is for.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Root configuration for HealingHands. Loaded from ModConfig/healinghands.json.
+/// Top-level configuration for HealingHands. Loaded from
+/// <c>ModConfig/healinghands.json</c>; written with sensible defaults on first run.
 /// </summary>
 public class HealingHandsConfig
 {
     /// <summary>
-    /// Master switch. When false the mod is fully inert.
-    /// Default: true.
+    /// Master on/off switch. When false, the mod performs no modification whatsoever and
+    /// every heal uses the item's authored values. Default: true.
     /// </summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// When true, trait modifiers only fire when the healer targets a
-    /// <em>different</em> player (Ctrl + aim + use). Self-heals pass through
-    /// unmodified. When false self-heals are also affected.
-    /// Default: true.
-    /// </summary>
-    public bool OnlyAffectOtherPlayerHeals { get; set; } = true;
-
-    /// <summary>
-    /// Multipliers used when the healer has <em>none</em> of the listed traits.
-    /// If the healer has at least one matching trait these defaults are ignored
-    /// entirely; only the compounded trait values apply.
+    /// Multipliers used when the healer has <em>none</em> of the traits listed in
+    /// <see cref="TraitModifiers"/>. As soon as one or more listed traits match, these
+    /// defaults are ignored completely and only the matched traits are used.
+    /// <para>The shipped value is a flat +25% to all three parameters, so an untraited
+    /// player still heals others noticeably better than the item's base numbers.</para>
     /// </summary>
     public HealingValues Defaults { get; set; } = new();
 
     /// <summary>
-    /// Per-trait entries. Each entry declares how a single trait shifts the
-    /// three healing parameters. When a healer has more than one listed trait
-    /// all matching entries are combined via <see cref="CompoundingMode"/>.
-    /// Any trait code — vanilla or modded — is valid here; unrecognised codes
-    /// are simply never matched and have no effect.
+    /// One entry per trait that should change healing. Each entry binds a trait code to the
+    /// three multipliers it contributes. When the healer has more than one matching trait,
+    /// the matches are combined using <see cref="CompoundingMode"/>. Any trait code works —
+    /// vanilla or modded; codes no player has are simply never matched.
     /// </summary>
     public List<TraitModifierConfig> TraitModifiers { get; set; } = [];
 
     /// <summary>
-    /// Controls how multiple matching trait multipliers are combined.
+    /// How multiple matching trait multipliers are combined into one value per parameter.
+    /// There are exactly three modes:
     /// <list type="bullet">
-    ///   <item><term>Multiplicative</term><description>m1 × m2 × … × mN</description></item>
-    ///   <item><term>Additive</term><description>1 + (m1−1) + (m2−1) + … — linear, avoids runaway</description></item>
-    ///   <item><term>Highest</term><description>Only the single highest per parameter</description></item>
+    ///   <item><term>Additive</term><description>(default) Sum each trait's distance from 1.0:
+    ///   <c>1 + (m1−1) + (m2−1) + … + (mN−1)</c>. A +25% trait and a −15% trait net to +10%.
+    ///   Bonuses and penalties cancel linearly, so stacking many traits stays controlled.</description></item>
+    ///   <item><term>Multiplicative</term><description>Chain the multipliers:
+    ///   <c>m1 × m2 × … × mN</c>. ×1.25 and ×1.15 give ×1.4375. Bonuses compound on each other,
+    ///   so stacking grows faster than additive.</description></item>
+    ///   <item><term>Highest</term><description>No stacking — take only the single largest
+    ///   multiplier for each parameter across all matched traits.</description></item>
     /// </list>
-    /// Default: Multiplicative.
     /// </summary>
-    public CompoundingMode CompoundingMode { get; set; } = CompoundingMode.Multiplicative;
+    public CompoundingMode CompoundingMode { get; set; } = CompoundingMode.Additive;
 
-    /// <summary>Minimum allowed final multiplier. Default: 0.05.</summary>
+    /// <summary>Lower clamp applied to every final combined multiplier, after compounding. Default: 0.05.</summary>
     public float MinMultiplier { get; set; } = 0.05f;
 
-    /// <summary>Maximum allowed final multiplier. Default: 10.0.</summary>
+    /// <summary>Upper clamp applied to every final combined multiplier, after compounding. Default: 10.0.</summary>
     public float MaxMultiplier { get; set; } = 10.0f;
 
-    // ── Default config ────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Default config — written to disk when no config file exists yet
+    // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Builds the default config written on first run.
-    /// All trait codes here are from the vanilla traits.json
-    /// (assets/game/config/characterclasses.json).
+    /// Builds the configuration written to <c>ModConfig/healinghands.json</c> on first run.
+    /// The bundled traits are all vanilla character traits (from
+    /// <c>assets/game/config/characterclasses.json</c>): five positive and five negative,
+    /// chosen for their thematic fit to a healing role. The baseline is +25%, and the trait
+    /// values are scaled around that baseline.
     /// </summary>
     public static HealingHandsConfig CreateDefault() => new()
     {
-        Enabled                    = true,
-        OnlyAffectOtherPlayerHeals = true,
-        CompoundingMode            = CompoundingMode.Multiplicative,
-        MinMultiplier              = 0.05f,
-        MaxMultiplier              = 10.0f,
+        Enabled         = true,
+        CompoundingMode = CompoundingMode.Additive,
+        MinMultiplier   = 0.05f,
+        MaxMultiplier   = 10.0f,
 
-        // Defaults: applied when the healer has NONE of the listed traits.
-        // 1.0 on all multipliers means the item's authored values are used as-is.
+        // Applied when the healer has none of the traits below: a flat +25% across the board.
         Defaults = new HealingValues
         {
-            HpMultiplier         = 1.0f,
-            HealSpeedMultiplier  = 1.0f,
-            ApplySpeedMultiplier = 1.0f
+            HpMultiplier         = 1.25f,
+            HealSpeedMultiplier  = 1.25f,
+            ApplySpeedMultiplier = 1.25f
         },
 
         TraitModifiers =
         [
-            // ── Positive vanilla traits (healing-relevant) ───────────────────
+            // ── Positive traits ──────────────────────────────────────────────
 
             new TraitModifierConfig
             {
                 TraitCode = "soldier",
-                Comment   = "Vanilla positive trait. Hardened fighter — faster application and " +
-                            "slightly more durable heals (knows how to work under pressure).",
                 Values = new HealingValues
                 {
-                    HpMultiplier         = 1.10f,
+                    HpMultiplier         = 1.25f,
                     HealSpeedMultiplier  = 1.00f,
-                    ApplySpeedMultiplier = 1.25f
+                    ApplySpeedMultiplier = 1.55f
                 }
             },
             new TraitModifierConfig
             {
                 TraitCode = "hardy",
-                Comment   = "Vanilla positive trait. Robust constitution — heals others " +
-                            "for more and the heal resolves faster.",
                 Values = new HealingValues
                 {
-                    HpMultiplier         = 1.20f,
-                    HealSpeedMultiplier  = 1.15f,
+                    HpMultiplier         = 1.45f,
+                    HealSpeedMultiplier  = 1.35f,
                     ApplySpeedMultiplier = 1.00f
                 }
             },
             new TraitModifierConfig
             {
                 TraitCode = "mender",
-                Comment   = "Vanilla positive trait. Skilled at repair and maintenance — " +
-                            "naturally adept at applying remedies quickly.",
                 Values = new HealingValues
                 {
-                    HpMultiplier         = 1.10f,
-                    HealSpeedMultiplier  = 1.10f,
-                    ApplySpeedMultiplier = 1.30f
+                    HpMultiplier         = 1.25f,
+                    HealSpeedMultiplier  = 1.25f,
+                    ApplySpeedMultiplier = 1.65f
                 }
             },
             new TraitModifierConfig
             {
-                TraitCode = "merciless",
-                Comment   = "Vanilla positive trait. Precise and efficient — applies healing " +
-                            "items with clinical speed.",
+                TraitCode = "furtive",
                 Values = new HealingValues
                 {
                     HpMultiplier         = 1.00f,
                     HealSpeedMultiplier  = 1.00f,
-                    ApplySpeedMultiplier = 1.40f
+                    ApplySpeedMultiplier = 1.45f
                 }
             },
             new TraitModifierConfig
             {
                 TraitCode = "resourceful",
-                Comment   = "Vanilla positive trait. Gets more out of everything — " +
-                            "including healing items.",
                 Values = new HealingValues
                 {
-                    HpMultiplier         = 1.25f,
+                    HpMultiplier         = 1.55f,
                     HealSpeedMultiplier  = 1.00f,
                     ApplySpeedMultiplier = 1.00f
                 }
             },
 
-            // ── Negative vanilla traits (healing penalty) ────────────────────
+            // ── Negative traits ──────────────────────────────────────────────
 
             new TraitModifierConfig
             {
                 TraitCode = "frail",
-                Comment   = "Vanilla negative trait. Weak constitution — has less energy " +
-                            "to channel into healing others.",
                 Values = new HealingValues
                 {
-                    HpMultiplier         = 0.80f,
-                    HealSpeedMultiplier  = 0.90f,
+                    HpMultiplier         = 0.65f,
+                    HealSpeedMultiplier  = 0.80f,
                     ApplySpeedMultiplier = 1.00f
                 }
             },
             new TraitModifierConfig
             {
                 TraitCode = "nervous",
-                Comment   = "Vanilla negative trait. Anxious under pressure — slower to " +
-                            "complete the application.",
                 Values = new HealingValues
                 {
                     HpMultiplier         = 1.00f,
                     HealSpeedMultiplier  = 1.00f,
-                    ApplySpeedMultiplier = 0.70f
+                    ApplySpeedMultiplier = 0.55f
                 }
             },
             new TraitModifierConfig
             {
                 TraitCode = "weak",
-                Comment   = "Vanilla negative trait. Physically underpowered — less effective " +
-                            "at forcing remedies to take hold.",
                 Values = new HealingValues
                 {
-                    HpMultiplier         = 0.85f,
-                    HealSpeedMultiplier  = 0.85f,
+                    HpMultiplier         = 0.70f,
+                    HealSpeedMultiplier  = 0.70f,
                     ApplySpeedMultiplier = 1.00f
                 }
             },
             new TraitModifierConfig
             {
                 TraitCode = "kind",
-                Comment   = "Vanilla negative trait. Too gentle — takes longer to apply " +
-                            "healing items (careful but slow).",
                 Values = new HealingValues
                 {
                     HpMultiplier         = 1.00f,
                     HealSpeedMultiplier  = 1.00f,
-                    ApplySpeedMultiplier = 0.80f
+                    ApplySpeedMultiplier = 0.65f
                 }
             },
             new TraitModifierConfig
             {
-                TraitCode = "furtive",
-                Comment   = "Vanilla positive trait. Light-footed and precise — quick hands " +
-                            "translate to faster item application.",
+                TraitCode = "ravenous",
                 Values = new HealingValues
                 {
-                    HpMultiplier         = 1.00f,
-                    HealSpeedMultiplier  = 1.00f,
-                    ApplySpeedMultiplier = 1.20f
+                    HpMultiplier         = 0.80f,
+                    HealSpeedMultiplier  = 0.90f,
+                    ApplySpeedMultiplier = 0.80f
                 }
             }
         ]
@@ -215,76 +201,98 @@ public class HealingHandsConfig
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HealingValues
+// HealingValues — the three per-parameter multipliers
+//
+// A multiplier of 1.0 means "no change". Above 1.0 is an improvement, below 1.0 is
+// a penalty. The three multipliers map onto the three stages of a heal:
+//
+//   HpMultiplier         → how much health the item ultimately restores
+//   HealSpeedMultiplier  → how fast the restoration ticks resolve once applied
+//   ApplySpeedMultiplier → how fast the item can be applied (cast time)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// The three multipliers for a single heal context. Used for both
-/// <see cref="HealingHandsConfig.Defaults"/> and <see cref="TraitModifierConfig.Values"/>.
+/// The three multipliers describing how a heal is modified. Used both for
+/// <see cref="HealingHandsConfig.Defaults"/> and for each
+/// <see cref="TraitModifierConfig.Values"/>.
 /// </summary>
 public class HealingValues
 {
     /// <summary>
-    /// Multiplier on the item's authored HP amount.
-    /// 1.0 = unchanged; 1.3 = 30 % extra; 0.8 = 20 % less.
-    /// <para>Note: stacks multiplicatively with the healer's vanilla
-    /// <c>healingeffectivness</c> stat (set by character class bonuses,
-    /// gear, potions, etc.).</para>
+    /// Scales the total HP the item restores. 1.0 leaves it unchanged; 1.25 restores 25%
+    /// more; 0.70 restores 30% less. Applied to the heal as it lands on the target by
+    /// <see cref="HealingHands.Systems.HealReceiveBehavior"/>.
     /// </summary>
     public float HpMultiplier { get; set; } = 1.0f;
 
     /// <summary>
-    /// Multiplier on how fast heal-over-time ticks resolve.
-    /// Values above 1.0 shorten the HoT duration (ticks arrive faster).
+    /// Scales how fast the heal-over-time ticks resolve. Above 1.0 compresses the same total
+    /// HP into a shorter window so the heal finishes sooner; below 1.0 stretches it out. The
+    /// total HP restored is unchanged — only the pacing. Applied by
+    /// <see cref="HealingHands.Systems.HealReceiveBehavior"/>.
     /// </summary>
     public float HealSpeedMultiplier { get; set; } = 1.0f;
 
     /// <summary>
-    /// Multiplier on the item's use/cast duration.
-    /// Values above 1.0 shorten the cast time; values below 1.0 lengthen it.
-    /// <para>Note: stacks multiplicatively with the healer's vanilla
-    /// <c>healingeffectivness</c> stat.</para>
+    /// Scales how fast the item is applied — the cast/charge time before the heal fires.
+    /// Above 1.0 shortens the cast; below 1.0 lengthens it. This is realized through the
+    /// vanilla <c>healingeffectivness</c> stat by
+    /// <see cref="HealingHands.Systems.HealingInterceptBehavior"/>, so the contribution
+    /// stacks on top of whatever that stat is already at from the healer's gear, food, etc.
     /// </summary>
     public float ApplySpeedMultiplier { get; set; } = 1.0f;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CompoundingMode
-// ─────────────────────────────────────────────────────────────────────────────
-
-public enum CompoundingMode { Multiplicative, Additive, Highest }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TraitModifierConfig
+// CompoundingMode — how several matching traits combine
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Defines how one character trait modifies healing applied to another player.
+/// The three ways multiple matching trait multipliers can be combined. See
+/// <see cref="HealingHandsConfig.CompoundingMode"/> for the exact formulas and trade-offs.
+/// </summary>
+public enum CompoundingMode
+{
+    /// <summary>Chain the multipliers: m1 × m2 × … × mN. Bonuses compound on each other.</summary>
+    Multiplicative,
+
+    /// <summary>Sum the deltas from 1.0: 1 + (m1−1) + … + (mN−1). Linear; bonuses and penalties cancel.</summary>
+    Additive,
+
+    /// <summary>Take only the single largest multiplier per parameter. No stacking.</summary>
+    Highest
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TraitModifierConfig — one trait's contribution
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Binds one character trait to the multipliers it contributes when the healer has it.
 /// </summary>
 public class TraitModifierConfig
 {
     /// <summary>
-    /// Exact trait code to match in the healer's
-    /// <c>entity.WatchedAttributes["traits"]</c> tree.
-    /// Vanilla codes are listed in <c>assets/game/config/characterclasses.json</c>
-    /// (or <c>traits.json</c> in the mod's config folder). Modded trait codes work
-    /// identically — any string that matches a key in that attribute tree is valid.
+    /// The trait code to look for in the healer's <c>WatchedAttributes["traits"]</c> tree.
+    /// Vanilla codes are listed in <c>assets/game/config/characterclasses.json</c>; modded
+    /// traits use the same convention and work identically.
     /// </summary>
     public string TraitCode { get; set; } = "";
 
-    /// <summary>Optional human-readable note. Not used for logic.</summary>
-    public string Comment { get; set; } = "";
 
-    /// <summary>The multipliers this trait contributes.</summary>
+    /// <summary>The multipliers this trait contributes when matched.</summary>
     public HealingValues Values { get; set; } = new();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HealModifier — computed once per heal event
+// HealModifier — the resolved multipliers for a single heal event
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Resolved combined multipliers for a single heal event.
+/// The final, combined, clamped multipliers for one heal event. Produced by
+/// <see cref="Compute"/> and consumed by
+/// <see cref="HealingHands.Systems.HealingInterceptBehavior"/> (application speed) and
+/// <see cref="HealingHands.Systems.HealReceiveBehavior"/> (HP and heal-over-time speed).
 /// </summary>
 public readonly struct HealModifier
 {
@@ -292,25 +300,28 @@ public readonly struct HealModifier
     public float HealSpeedMultiplier  { get; init; }
     public float ApplySpeedMultiplier { get; init; }
 
+    /// <summary>True when all three multipliers are exactly 1.0 — i.e. nothing to apply.</summary>
     internal bool IsIdentity =>
         HpMultiplier         == 1.0f &&
         HealSpeedMultiplier  == 1.0f &&
         ApplySpeedMultiplier == 1.0f;
 
+    /// <summary>A no-op modifier, returned when the mod is disabled or the heal is a self-heal.</summary>
     internal static readonly HealModifier Identity = new()
     {
         HpMultiplier = 1.0f, HealSpeedMultiplier = 1.0f, ApplySpeedMultiplier = 1.0f
     };
 
     /// <summary>
-    /// Computes the combined modifier for <paramref name="healer"/>.
+    /// Resolves the combined modifier for <paramref name="healer"/>:
     /// <list type="bullet">
-    ///   <item>No matching traits → returns <see cref="HealingHandsConfig.Defaults"/>.</item>
-    ///   <item>At least one matching trait → compounds only trait values; defaults ignored.</item>
+    ///   <item>No configured trait matches → returns the clamped
+    ///   <see cref="HealingHandsConfig.Defaults"/>.</item>
+    ///   <item>One or more traits match → combines only the matched trait values using
+    ///   <see cref="HealingHandsConfig.CompoundingMode"/>, then clamps. Defaults are not used.</item>
     /// </list>
-    /// Trait matching reads <c>entity.WatchedAttributes["traits"]</c> as a flat
-    /// <see cref="ITreeAttribute"/> of boolean values keyed by trait code. This works
-    /// for both vanilla traits and any modded trait that follows the same convention.
+    /// Matching reads <c>WatchedAttributes["traits"]</c> as a flat tree of boolean entries
+    /// keyed by trait code — the convention used by both vanilla and modded traits.
     /// </summary>
     internal static HealModifier Compute(
         Entity healer,
@@ -320,6 +331,7 @@ public readonly struct HealModifier
     {
         var traitsTree = healer.WatchedAttributes.GetTreeAttribute("traits");
 
+        // Gather every configured trait the healer actually has.
         List<HealingValues> matched = [];
         foreach (TraitModifierConfig entry in config.TraitModifiers)
         {
@@ -335,7 +347,7 @@ public readonly struct HealModifier
             }
         }
 
-        // No traits matched → use defaults.
+        // No trait matched → use the defaults block.
         if (matched.Count == 0)
         {
             HealingValues d = config.Defaults;
@@ -347,7 +359,7 @@ public readonly struct HealModifier
             };
         }
 
-        // At least one trait matched → compound; defaults are NOT used.
+        // One or more traits matched → compound them; defaults are ignored.
         float hp    = Combine(matched, v => v.HpMultiplier,         config.CompoundingMode);
         float speed = Combine(matched, v => v.HealSpeedMultiplier,  config.CompoundingMode);
         float apply = Combine(matched, v => v.ApplySpeedMultiplier, config.CompoundingMode);
@@ -360,6 +372,10 @@ public readonly struct HealModifier
         };
     }
 
+    /// <summary>
+    /// Combines one parameter across all matched traits according to <paramref name="mode"/>.
+    /// See <see cref="HealingHandsConfig.CompoundingMode"/> for what each mode means.
+    /// </summary>
     private static float Combine(
         List<HealingValues> entries,
         System.Func<HealingValues, float> sel,
