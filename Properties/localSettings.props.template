@@ -1,19 +1,19 @@
 <Project>
   <!--
-    Copy this file to Properties/localSettings.props (git-ignored) and fill in your paths.
+    localSettings.props - machine-specific paths. NOT committed.
+    Copy to Properties/localSettings.props and fill in your own paths.
 
-    On Windows, typical paths:
-      C:\Program Files\Vintagestory
-      C:\Users\YourName\AppData\Roaming\VintagestoryData\Mods\overhaullib
+    GameDirectory priority (first non-empty wins):
+      1. GameDirectory_X_XX below
+      2. VINTAGE_STORY_X_XX environment variable
+      3. VINTAGE_STORY environment variable
 
-    On Linux, typical paths:
-      /home/yourname/.local/share/vintagestory
+    To support another game version:
+      1. Add a GameDirectory_X_XX entry here.
+      2. Copy VSHealingHands_1.22.5.csproj and update VSVersion + TargetFramework.
   -->
   <PropertyGroup>
-    <!-- Path to the Vintage Story 1.21.x installation directory -->
-    <GameDirectory_1_21></GameDirectory_1_21>
-
-    <!-- Path to the Vintage Story 1.22.x installation directory -->
-    <GameDirectory_1_22></GameDirectory_1_22>
+    <!-- Vintage Story 1.22.5 -->
+    <GameDirectory_1_22_5>D:\VSLauncher\VSLGameVersions\1.22.5</GameDirectory_1_22_5>
   </PropertyGroup>
 </Project>
